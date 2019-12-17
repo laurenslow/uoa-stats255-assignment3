@@ -1,0 +1,164 @@
+---
+title: "Assignment 3"
+author: "Lauren Low"
+date: "9/19/2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(lubridate)
+library(leaflet)
+generation = read.csv("~/Downloads/generation.csv", header = TRUE)
+regions = read.csv("~/Downloads/regions.csv")
+plants = read.csv("~/Downloads/plants.csv")
+```
+
+#Question 2
+
+##part a
+```{r}
+generation$Fuel <- as.factor(plants$Fuel[match(generation$Node, plants$Node)])
+generation$Region <- as.factor(plants$Region[match(generation$Node, plants$Node)])
+generation$Renewable <- as.factor(plants$Type[match(generation$Node, plants$Node)])
+generation
+```
+
+##part b
+```{r}
+windgen <- generation %>%
+  filter(Fuel == "Wind")
+windgen
+```
+
+##part c
+```{r}
+windgen_graph <- pairs(windgen[c(3:8)], col = windgen$Date, lower.panel = NULL, cex.labels = 2) +
+  title("Lauren Low 250348618")
+windgen_graph
+#In general, closer trading periods had stronger positive correnlations of energy (measured in MWh) collegected by wind turbines (i.e. the positive correlation between TP1 and TP2 was stronger than between TP1 and TP6)
+```
+
+##part d
+```{r}
+generation_gather <- gather(generation, key = TP, value = MWh, starts_with("TP"))
+generation_gather
+```
+
+##part e
+```{r}
+generation_fuel <- generation_gather %>%
+  group_by(Fuel) %>%
+  summarize(MWh = sum(MWh, na.rm = TRUE))
+generation_fuel
+```
+
+##part f
+```{r}
+generation_regions <- generation_gather %>%
+  group_by(Region) %>%
+  summarize(MWh = sum(MWh, na.rm = TRUE))
+generation_regions
+```
+
+```{r}
+stacked_plot <- ggplot(data = generation_gather) +
+  geom_bar(mapping = aes(x = Region, y = MWh, fill = Fuel), stat = "identity") +
+  ggtitle("Lauren Low 250348618")
+stacked_plot
+#In region CNI, the highest source of energy generation was pretty evenly split between geo and hydro, in region LNI the highest source of energy generation was gas, in region LSI the highest source of energy generation was hydro, in region UNI the highest source of energy generation was gas, and in region USI the highest source of energy generation was hydro.  Regions CNI and LNI generated the most energy while regions UNI and USI generatd the least energy.
+```
+
+
+Converting TP values to integers:
+```{r}
+generation_gather$TP = as.integer(gsub("TP", "", generation_gather$TP))
+generation_gather
+```
+
+Parsing date:
+```{r}
+generation_gather$Date = parse_date_time(generation_gather$Date,"d/m/Y")
+generation_gather
+```
+
+##part g
+```{r}
+generation_gather$month <- format(as.Date(generation$Date), "%m")
+generation_gather
+```
+
+```{r}
+avgs_table <- generation_gather %>%
+  filter(TP <= 48) %>%
+  group_by(month, TP) %>%
+  summarize(avg_MWh = mean(MWh))
+avgs_table
+```
+
+
+```{r}
+line_graph <- ggplot(data = avgs_table) +
+  geom_line(mapping = aes(x = TP, y = avg_MWh, color = month)) +
+  ggtitle("Lauren Low 250348618")
+line_graph
+#In general, during winter months in New Zealand, the energy generation was higher than the summer months.  Further, on average there were energy generation spikes around trading periods 17 and 37 of each month and low amounts of energy generation around trading period 8
+```
+
+##part h
+```{r}
+map <- leaflet(regions) %>%
+  addTiles() %>%
+  addCircleMarkers(lng = regions$Lng, lat = regions$Lat)
+map
+```
+
+##part i
+```{r}
+generation_gather2 <- gather(generation, key = TP, value = MWh, starts_with("TP"))
+```
+
+```{r}
+totalgen <- generation_gather2 %>%
+  group_by(Region, Renewable) %>%
+  summarize(Total = sum(MWh, na.rm = TRUE))
+totalgen
+```
+
+##part j
+```{r}
+totalgen.spread <- totalgen %>%
+  spread(key = Renewable, value = Total)
+totalgen.spread
+```
+
+replacing NA values with 0
+```{r}
+totalgen.spread[is.na(totalgen.spread)]=0
+totalgen.spread
+```
+
+##part k
+```{r}
+totalgen.spread$Lat <- as.numeric(regions$Lat[match(totalgen.spread$Region, regions$Region)])
+totalgen.spread$Lng <- as.numeric(regions$Lng[match(totalgen.spread$Region, regions$Region)])
+totalgen.spread$TotalGenerarion <- totalgen.spread$FossilFuel + totalgen.spread$Renewable
+totalgen.spread$PTotalGenerarion <- 40*((totalgen.spread$FossilFuel + totalgen.spread$Renewable) / 18370360249)
+totalgen.spread$PRenewable <- totalgen.spread$Renewable / totalgen.spread$TotalGenerarion
+totalgen.spread
+```
+
+```{r}
+colorN = colorNumeric(palette = "viridis", domain = c(0,1))
+proportional_map <- leaflet(totalgen.spread) %>%
+  addTiles() %>%
+  addCircleMarkers(lng = totalgen.spread$Lng, lat = totalgen.spread$Lat, color = ~colorN(totalgen.spread$PRenewable), radius = totalgen.spread$PTotalGenerarion) %>%
+  addLegend("bottomright", pal = colorN, values = ~PRenewable, title = "Proportion of Renewable")
+ proportional_map
+```
+
